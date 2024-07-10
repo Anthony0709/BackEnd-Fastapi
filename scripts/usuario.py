@@ -5,6 +5,9 @@ from passlib.context import CryptContext
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
+def get_usuarios(db: Session, skip: int = 0, limit: int = 10):
+    return db.query(models.Usuario).offset(skip).limit(limit).all()
+
 def get_usuario_by_correo(db: Session, correo: str):
     return db.query(models.Usuario).filter(models.Usuario.correo == correo).first()
 

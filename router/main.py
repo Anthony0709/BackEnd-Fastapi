@@ -40,13 +40,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-@app.get("/",tags=['Mensaje'])
+@app.get("/",tags=['Mensaje'],dependencies=[Depends(auth.read_usuarios_me)])
 async def home():
     return ("Bienvenido APP en ejecucion")
 
 #***************************************************************************
 
-@app.post("/productos/",tags=['Crear'], response_model=products.Producto)
+@app.post("/productos/",tags=['Crear'], response_model=products.Producto,dependencies=[Depends(auth.read_usuarios_me)])
 async def create_producto(
     nombre: str = Form(...),
     descripcion: str = Form(None),
@@ -92,19 +92,19 @@ async def create_producto(
         print(f"Error: {str(e)}")
         raise HTTPException(status_code=400, detail=str(e))
 
-@app.get("/productos/",tags=['Listar'], response_model = List[products.Producto])
+@app.get("/productos/",tags=['Listar'], response_model = List[products.Producto],dependencies=[Depends(auth.read_usuarios_me)])
 async def read_productos(skip : int = 0 , limit : int = 10, db : Session = Depends(database.get_db)):
     product = producto.get_productos(db, skip=skip, limit=limit)
     return product
 
-@app.get("/productos/{id}",tags=['Listar por ID'], response_model=products.Producto)
+@app.get("/productos/{id}",tags=['Listar por ID'], response_model=products.Producto,dependencies=[Depends(auth.read_usuarios_me)])
 async def read_producto(producto_id : int, db : Session = Depends(database.get_db)):
     db_producto = producto.get_producto(db, producto_id = producto_id)
     if db_producto is None:
         raise HTTPException(status_code = 404, detail = "Producto no encontrado")
     return db_producto
 
-@app.put("/productos/{id}",tags=['Actualizar'], response_model=products.ProductoUpdate)
+@app.put("/productos/{id}",tags=['Actualizar'], response_model=products.ProductoUpdate,dependencies=[Depends(auth.read_usuarios_me)])
 async def update_producto(
     producto_id: int,
     nombre: Optional[str] = Form(None),
@@ -170,7 +170,7 @@ async def update_producto(
         print(f"Error: {str(e)}")
         raise HTTPException(status_code=400, detail=str(e))
 
-@app.delete('/productos/{id}', tags=['Eliminar'], response_model=dict, status_code=200)
+@app.delete('/productos/{id}', tags=['Eliminar'], response_model=dict, status_code=200,dependencies=[Depends(auth.read_usuarios_me)])
 def delete_producto(producto_id: int, db: Session = Depends(database.get_db)) -> dict:
     try:
         # Buscar el producto en la base de datos usando el ID proporcionado
@@ -201,30 +201,30 @@ def delete_producto(producto_id: int, db: Session = Depends(database.get_db)) ->
 
 #***************************************************************************
 
-@app.post("/categorias/",tags=['Crear'], response_model=Category.Categoria)
+@app.post("/categorias/",tags=['Crear'], response_model=Category.Categoria,dependencies=[Depends(auth.read_usuarios_me)])
 async def create_categoria(categoriaSC: Category.CategoriaCreate, db: Session = Depends(database.get_db)):
     db_categoria = category.get_categoria_by_name(db, nombre=categoriaSC.descripcion)
     if db_categoria:
         raise HTTPException(status_code=400, detail="La categoría ya existe")
     return category.create_categoria(db=db, categoria=categoriaSC)
 
-@app.get("/categorias/",tags=['Listar'], response_model= List[Category.Categoria])
+@app.get("/categorias/",tags=['Listar'], response_model= List[Category.Categoria],dependencies=[Depends(auth.read_usuarios_me)])
 async def read_categorias(skip: int = 0, limit: int = 10, db: Session = Depends(database.get_db)):
     categorias = category.get_categorias(db, skip=skip, limit=limit)
     return categorias
 
-@app.get("/categorias/{categoria_id}",tags=['Listar por ID'], response_model=Category.Categoria)
+@app.get("/categorias/{categoria_id}",tags=['Listar por ID'], response_model=Category.Categoria,dependencies=[Depends(auth.read_usuarios_me)])
 async def read_categoria(categoria_id: int, db: Session = Depends(database.get_db)):
     db_categoria = category.get_categoria(db, categoria_id=categoria_id)
     if db_categoria is None:
         raise HTTPException(status_code=404, detail="Categoría no encontrada")
     return db_categoria
 
-@app.delete('/categorias/{id}', tags=['Eliminar'], response_model=dict, status_code=200)
-def delete_categoria(categoria_id: int, db: Session = Depends(database.get_db)) -> dict:
+@app.delete('/categorias/{id}', tags=['Eliminar'], response_model=dict, status_code=200,dependencies=[Depends(auth.read_usuarios_me)])
+def delete_categoria(id: int, db: Session = Depends(database.get_db)) -> dict:
     try:
         # Buscar el categoria en la base de datos usando el ID proporcionado
-        db_categoria = category.get_categoria(db, categoria_id)
+        db_categoria = category.get_categoria(db, id)
         
         # Si la categoria no se encuentra, devolver un mensaje de error con código 404
         if not db_categoria:
@@ -249,12 +249,28 @@ def delete_categoria(categoria_id: int, db: Session = Depends(database.get_db)) 
         # Lanzar una excepción HTTP 500 indicando un error interno del servidor
         raise HTTPException(status_code=500, detail="Error interno del servidor")
 
-@app.put("/categorias/{categoria_id}",tags=['Actualizar'], response_model=Category.CategoriaUpdate)
+@app.put("/categorias/{categoria_id}",tags=['Actualizar'], response_model=Category.CategoriaUpdate,dependencies=[Depends(auth.read_usuarios_me)])
+def actualiza_ventas(id: int, categoria: Category.CategoriaUpdate, db: Session = Depends(database.get_db)) -> dict:
+    resultado = db.query(models.Categoria).filter(models.Categoria.IdCategoria == id).first()
+    if not resultado:
+        return JSONResponse(status_code=404, content={'mensaje': 'No se ha podido actualizar'})
+    resultado.descripcion = categoria.descripcion
+    resultado.activo = categoria.activo
+    db.commit()
+    # recorrer los elementos de la lista
+    return JSONResponse(content={'mensaje': 'Venta actualizada'}, status_code=201)
+
+
+"""
 def update_categoria(categoria_id: int, categoria: Category.CategoriaUpdate, db: Session = Depends(database.get_db)):
     db_categoria = category.update_categoria(db, categoria_id, categoria)
     if not db_categoria:
         raise HTTPException(status_code=404, detail="Categoría no encontrada")
     return db_categoria
+"""
+
+
+
 
 #***************************************************************************
 
@@ -262,30 +278,30 @@ app.include_router(auth.router)
 
 #***************************************************************************
 
-@app.post("/marca/",tags=['Crear'], response_model=marke.Marca)
+@app.post("/marca/",tags=['Crear'], response_model=marke.Marca,dependencies=[Depends(auth.read_usuarios_me)])
 async def create_marca(marcaP: marke.MarcaCreate, db: Session = Depends(database.get_db)):
     db_marca = marca.get_marca_by_name(db, nombre=marcaP.descripcion)
     if db_marca:
         raise HTTPException(status_code=400, detail="La Marca ya existe")
     return marca.create_marca(db=db, marca=marcaP)
 
-@app.get("/marca/",tags=['Listar'], response_model=List[marke.Marca])
+@app.get("/marca/",tags=['Listar'], response_model=List[marke.Marca],dependencies=[Depends(auth.read_usuarios_me)])
 async def read_marca(skip: int = 0, limit: int = 10, db: Session = Depends(database.get_db)):
     marcas = marca.get_marcas(db, skip=skip, limit=limit)
     return marcas
 
-@app.get("/marca/{id}",tags=['Listar por ID'], response_model=marke.Marca)
+@app.get("/marca/{id}",tags=['Listar por ID'], response_model=marke.Marca,dependencies=[Depends(auth.read_usuarios_me)])
 async def read_marca(marcas_id: int, db: Session = Depends(database.get_db)):
     db_marca = marca.get_marca(db, marca_id=marcas_id)
     if db_marca is None:
         raise HTTPException(status_code=404, detail="Marca no encontrada")
     return db_marca
 
-@app.delete('/marca/{id}', tags=['Eliminar'], response_model=dict, status_code=200)
-def delete_marca(marca_id: int, db: Session = Depends(database.get_db)) -> dict:
+@app.delete("/marca/{id}", tags=['Eliminar'], response_model=dict, status_code=200,dependencies=[Depends(auth.read_usuarios_me)])
+def delete_marca(id: int, db: Session = Depends(database.get_db)) -> dict:
     try:
         # Buscar la marca en la base de datos usando el ID proporcionado
-        db_marca = marca.get_marca(db, marca_id)
+        db_marca = marca.get_marca(db, id)
         
         # Si la marca no se encuentra, devolver un mensaje de error con código 404
         if not db_marca:
@@ -310,7 +326,7 @@ def delete_marca(marca_id: int, db: Session = Depends(database.get_db)) -> dict:
         # Lanzar una excepción HTTP 500 indicando un error interno del servidor
         raise HTTPException(status_code=500, detail="Error interno del servidor")
 
-@app.put("/marcas/{marca_id}",tags=['Actualizar'], response_model=marke.MarcaUpdate)
+@app.put("/marcas/{id}",tags=['Actualizar'], response_model=marke.MarcaUpdate,dependencies=[Depends(auth.read_usuarios_me)])
 def update_marca(marca_id: int, marcaS: marke.MarcaUpdate, db: Session = Depends(database.get_db)):
     db_marca = marca.update_marca(db, marca_id, marcaS)
     if not db_marca:

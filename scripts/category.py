@@ -22,7 +22,6 @@ def get_categorias(db: Session, skip: int = 0, limit: int = 10):
 def get_categoria(db: Session, categoria_id: int):
     return db.query(models.Categoria).filter(models.Categoria.IdCategoria == categoria_id).first()
 
-# CRUD para Categoría
 def update_categoria(db: Session, categoria_id: int, categoria: Category.CategoriaUpdate):
     db_categoria = db.query(models.Categoria).filter(models.Categoria.IdCategoria == categoria_id).first()
     if not db_categoria:

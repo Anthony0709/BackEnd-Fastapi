@@ -17,7 +17,7 @@ class Categoria(Base):
     __tablename__ = 'categoria'
     IdCategoria	= Column(Integer, primary_key=True, index= True)
     descripcion = Column(String(100), nullable=False)	
-    activo = Column(Boolean, default = 1 )
+    activo = Column(Boolean, default = True )
     fechaRegistro = Column(DateTime, default=func.now(), nullable=False)
 
     categorias = relationship("Producto", back_populates="categoria")

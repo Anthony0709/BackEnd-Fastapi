@@ -1,6 +1,6 @@
 from datetime import timedelta, datetime as dt
 import logging
-from typing import Optional
+from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
@@ -10,7 +10,8 @@ from jose import JWTError, jwt
 from config import  database
 from schema import usuario as schemas
 from scripts import usuario as usuarioScript
-from models import models
+
+
 
 # Configuración de logging
 logging.basicConfig(level=logging.INFO)
@@ -20,7 +21,7 @@ router = APIRouter()
 
 SECRET_KEY = "your_secret_key"
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 12
+#ACCESS_TOKEN_EXPIRE_MINUTES = 12
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
@@ -46,30 +47,6 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
-@router.post("/usuarios/",tags=['Usuario'], response_model=schemas.Usuario)
-async def create_usuario(usuario: schemas.UsuarioCreate, db: Session = Depends(database.get_db)):
-    db_usuario = usuarioScript.get_usuario_by_correo(db, correo=usuario.correo)
-    if db_usuario:
-        raise HTTPException(status_code=400, detail="El correo ya está registrado")
-    return usuarioScript.create_usuario(db=db, usuario=usuario)
-
-@router.post("/token",tags=['Usuario'], response_model=schemas.Token)
-async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(database.get_db)):
-    print(f"Received login request with username: {form_data.username}, password: {form_data.password}")  # Print the username and password
-    usuario = authenticate_usuario(db, form_data.username, form_data.password)
-    
-    if not usuario:
-        raise HTTPException(
-            status_code=401,
-            detail="Correo o contraseña incorrectos",
-            headers={"WWW-Authenticate": "Bearer"},
-        )        
-    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_token = create_access_token(
-        data={"sub": usuario.correo}, expires_delta=access_token_expires
-    )    
-    return {"access_token":access_token, "token_type": "bearer"}
-
 @router.get("/usuarios/me",tags=['Usuario'], response_model=schemas.Usuario)
 async def read_usuarios_me(token: str = Depends(oauth2_scheme), db: Session = Depends(database.get_db)):
     credentials_exception = HTTPException(
@@ -89,11 +66,41 @@ async def read_usuarios_me(token: str = Depends(oauth2_scheme), db: Session = De
         raise credentials_exception
     return usuario
 
-@router.delete('/usuarios/{id}', tags=['Usuario'], response_model=dict, status_code=200)
-def delete_usuario(usuario_id: int, db: Session = Depends(database.get_db)) -> dict:
+@router.post("/usuarios/",tags=['Usuario'], response_model=schemas.Usuario,dependencies=[Depends(read_usuarios_me)])
+async def create_usuario(usuario: schemas.UsuarioCreate, db: Session = Depends(database.get_db)):
+    db_usuario = usuarioScript.get_usuario_by_correo(db, correo=usuario.correo)
+    if db_usuario:
+        raise HTTPException(status_code=400, detail="El correo ya está registrado")
+    return usuarioScript.create_usuario(db=db, usuario=usuario)
+
+@router.post("/token",tags=['Usuario'], response_model=schemas.Token)
+async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(database.get_db)):
+    print(f"Received login request with username: {form_data.username}, password: {form_data.password}")  # Print the username and password
+    usuario = authenticate_usuario(db, form_data.username, form_data.password)
+    
+    if not usuario:
+        raise HTTPException(
+            status_code=401,
+            detail="Correo o contraseña incorrectos",
+            headers={"WWW-Authenticate": "Bearer"},
+        )        
+    #access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": usuario.correo}
+        #, expires_delta=access_token_expires
+    )    
+    return {"access_token":access_token, "token_type": "bearer"}
+
+@router.get("/usuarios/",tags=['Usuario'], response_model= List[schemas.Usuario],dependencies=[Depends(read_usuarios_me)])
+async def read_usuario(skip: int = 0, limit: int = 10, db: Session = Depends(database.get_db)):
+    categorias = usuarioScript.get_usuarios(db, skip=skip, limit=limit)
+    return categorias
+
+@router.delete('/usuarios/{id}', tags=['Usuario'], response_model=dict, status_code=200,dependencies=[Depends(read_usuarios_me)])
+def delete_usuario(id: int, db: Session = Depends(database.get_db)) -> dict:
     try:
         # Buscar el usuario en la base de datos usando el ID proporcionado
-        db_usuario = usuarioScript.get_usuario_by_ID(db, usuario_id)
+        db_usuario = usuarioScript.get_usuario_by_ID(db, id)
         
         # Si el usuario no se encuentra, devolver un mensaje de error con código 404
         if not db_usuario:
@@ -118,8 +125,7 @@ def delete_usuario(usuario_id: int, db: Session = Depends(database.get_db)) -> d
         # Lanzar una excepción HTTP 500 indicando un error interno del servidor
         raise HTTPException(status_code=500, detail="Error interno del servidor")
     
-
-@router.put("/usuarios/{id}",tags=['Usuario'], response_model=schemas.UsuarioUpdate)
+@router.put("/usuarios/{id}",tags=['Usuario'], response_model=schemas.UsuarioUpdate,dependencies=[Depends(read_usuarios_me)])
 def update_usuario(user_id: int, user: schemas.UsuarioUpdate, db: Session = Depends(database.get_db)):
     db_usuario = usuarioScript.update_usuario(db, user_id, user)
     if not db_usuario:
