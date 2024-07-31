@@ -18,4 +18,4 @@ class Categoria(CategoriaBase):
 
 class CategoriaUpdate(BaseModel):
     descripcion: Optional[str] = None
-    activo: Optional[bool]
+    activo: Optional[bool] = None
